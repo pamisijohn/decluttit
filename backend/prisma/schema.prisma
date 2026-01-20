@@ -1,0 +1,309 @@
+// DECLUTTIT Database Schema
+// Prisma schema for PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==================== ENUMS ====================
+
+enum UserVerificationLevel {
+  BASIC
+  ID_VERIFIED
+  PREMIUM
+}
+
+enum ListingStatus {
+  ACTIVE
+  PENDING
+  SOLD
+  HIDDEN
+}
+
+enum ListingCondition {
+  NEW
+  LIKE_NEW
+  GOOD
+  FAIR
+  POOR
+}
+
+enum TransactionStatus {
+  PENDING
+  ESCROWED
+  SHIPPED
+  RECEIVED
+  RELEASED
+  DISPUTED
+  REFUNDED
+  CANCELLED
+}
+
+enum RequestStatus {
+  ACTIVE
+  MATCHED
+  EXPIRED
+  CANCELLED
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  OFFER
+  SYSTEM
+}
+
+// ==================== MODELS ====================
+
+model User {
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  phone              String?              @unique
+  passwordHash       String
+  fullName           String
+  profilePhotoUrl    String?
+  locationId         String?
+  verificationLevel  UserVerificationLevel @default(BASIC)
+  trustScore         Int                  @default(0)
+  isActive           Boolean              @default(true)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  // Relations
+  location           Location?            @relation(fields: [locationId], references: [id])
+  listings           Listing[]
+  buyerRequests      BuyerRequest[]
+  buyerTransactions  Transaction[]        @relation("BuyerTransactions")
+  sellerTransactions Transaction[]        @relation("SellerTransactions")
+  sentMessages       Message[]            @relation("SentMessages")
+  conversationsAsBuyer  Conversation[]    @relation("BuyerConversations")
+  conversationsAsSeller Conversation[]    @relation("SellerConversations")
+  complaints         Dispute[]            @relation("Complainant")
+  responses          Dispute[]            @relation("Respondent")
+  givenReviews       Review[]             @relation("Reviewer")
+  receivedReviews    Review[]             @relation("ReviewedUser")
+
+  @@index([email])
+  @@index([phone])
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  state     String
+  lga       String
+  city      String?
+  postalCode String?
+
+  users     User[]
+  listings  Listing[]
+  requests  BuyerRequest[]
+
+  @@index([state, lga])
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String     @unique
+  slug      String     @unique
+  icon      String?
+  parentId  String?
+  parent    Category?  @relation("Subcategories", fields: [parentId], references: [id])
+  children  Category[] @relation("Subcategories")
+
+  listings  Listing[]
+  requests  BuyerRequest[]
+
+  @@index([slug])
+}
+
+model Listing {
+  id              String         @id @default(uuid())
+  sellerId        String
+  title           String
+  description     String?
+  categoryId      String
+  condition       ListingCondition
+  price           Decimal        @db.Decimal(12, 2)
+  currency        String         @default("NGN")
+  locationId      String
+  status          ListingStatus  @default(ACTIVE)
+  isNegotiable    Boolean        @default(true)
+  viewCount       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  // Relations
+  seller          User           @relation(fields: [sellerId], references: [id])
+  category        Category       @relation(fields: [categoryId], references: [id])
+  location        Location       @relation(fields: [locationId], references: [id])
+  photos          ListingPhoto[]
+  buyerRequests   BuyerRequest[] @relation("ListingRequests")
+  transactions    Transaction[]
+
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([price])
+  @@index([createdAt])
+}
+
+model ListingPhoto {
+  id        String   @id @default(uuid())
+  listingId String
+  url       String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+}
+
+model BuyerRequest {
+  id              String          @id @default(uuid())
+  buyerId         String
+  title           String
+  description     String?
+  categoryId      String?
+  minPrice        Decimal?        @db.Decimal(12, 2)
+  maxPrice        Decimal?        @db.Decimal(12, 2)
+  preferredCondition ListingCondition?
+  locationId      String?
+  radiusKm        Int             @default(50)
+  status          RequestStatus   @default(ACTIVE)
+  expiresAt       DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Relations
+  buyer           User            @relation(fields: [buyerId], references: [id])
+  category        Category?       @relation(fields: [categoryId], references: [id])
+  location        Location?       @relation(fields: [locationId], references: [id])
+  listings        Listing[]       @relation("ListingRequests")
+  transactions    Transaction[]
+
+  @@index([buyerId])
+  @@index([categoryId])
+  @@index([status])
+}
+
+model Transaction {
+  id              String           @id @default(uuid())
+  listingId       String?
+  buyerId         String
+  sellerId        String
+  buyerRequestId  String?
+  amount          Decimal          @db.Decimal(12, 2)
+  platformFee     Decimal?         @db.Decimal(12, 2)
+  status          TransactionStatus @default(PENDING)
+  paymentIntentId String?
+  escrowId        String?
+  paidAt          DateTime?
+  releasedAt      DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  listing         Listing?         @relation(fields: [listingId], references: [id])
+  buyer           User             @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  seller          User             @relation("SellerTransactions", fields: [sellerId], references: [id])
+  buyerRequest    BuyerRequest?    @relation(fields: [buyerRequestId], references: [id])
+  conversation    Conversation?
+  dispute         Dispute?
+  reviews         Review[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([listingId])
+  @@index([status])
+}
+
+model Conversation {
+  id           String    @id @default(uuid())
+  transactionId String?   @unique
+  buyerId      String
+  sellerId     String
+  lastMessageAt DateTime  @default(now())
+  createdAt    DateTime   @default(now())
+
+  // Relations
+  transaction  Transaction? @relation(fields: [transactionId], references: [id])
+  buyer        User         @relation("BuyerConversations", fields: [buyerId], references: [id])
+  seller       User         @relation("SellerConversations", fields: [sellerId], references: [id])
+  messages     Message[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([transactionId])
+}
+
+model Message {
+  id            String      @id @default(uuid())
+  conversationId String
+  senderId      String
+  content       String
+  messageType   MessageType @default(TEXT)
+  isRead        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender        User         @relation("SentMessages", fields: [senderId], references: [id])
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+model Dispute {
+  id            String        @id @default(uuid())
+  transactionId String        @unique
+  complainantId String
+  respondentId  String
+  reason        String
+  description   String
+  evidence      String[]
+  status        DisputeStatus @default(OPEN)
+  resolution    String?
+  adminNotes    String?
+  createdAt     DateTime      @default(now())
+  resolvedAt    DateTime?
+
+  // Relations
+  transaction   Transaction   @relation(fields: [transactionId], references: [id])
+  complainant   User          @relation("Complainant", fields: [complainantId], references: [id])
+  respondent    User          @relation("Respondent", fields: [respondentId], references: [id])
+
+  @@index([transactionId])
+  @@index([status])
+}
+
+model Review {
+  id             String     @id @default(uuid())
+  transactionId  String
+  reviewerId     String
+  reviewedUserId String
+  rating         Int
+  comment        String?
+  createdAt      DateTime   @default(now())
+
+  // Relations
+  transaction    Transaction @relation(fields: [transactionId], references: [id])
+  reviewer       User        @relation("Reviewer", fields: [reviewerId], references: [id])
+  reviewedUser   User        @relation("ReviewedUser", fields: [reviewedUserId], references: [id])
+
+  @@unique([transactionId, reviewerId])
+  @@index([reviewedUserId])
+}
