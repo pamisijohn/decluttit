@@ -4,4 +4,4 @@ plans
 out
 .env.local
 .env.*.local
-generated/prisma
+/generated/prisma
