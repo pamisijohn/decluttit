@@ -3,12 +3,17 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ 
+  subsets: ["latin"],
+  display: 'swap',
+  variable: '--font-inter',
+});
 
 export const metadata: Metadata = {
-  title: "DECLUTTIT - Trust-First Declutter Marketplace",
+  title: "DECLUTTIT - The Gen Z Marketplace 🔥",
   description:
-    "Buy and sell pre-loved items with confidence. No doomscrolling, just trusted transactions.",
+    "Buy and sell pre-loved items with confidence. No cap, just trusted transactions fr fr.",
+  keywords: ["marketplace", "second-hand", "sustainable", "gen z", "trust", "escrow"],
 };
 
 export default function RootLayout({
@@ -17,8 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    <html lang="en" className="dark">
+      <body className={`${inter.className} antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>
